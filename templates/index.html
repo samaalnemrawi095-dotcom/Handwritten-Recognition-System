@@ -1,0 +1,317 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Handwritten Recognition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-gradient-to-br from-indigo-200 via-purple-100 to-pink-200">
+
+<div class="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+
+    <div class="text-center mb-8">
+        <div class="text-6xl mb-3">✍️</div>
+        <h1 class="text-5xl font-extrabold text-indigo-800 drop-shadow">
+            Handwritten Recognition
+        </h1>
+        <p class="text-gray-700 mt-3 text-lg">
+            Digits, letters, words, and digit sum using CNN
+        </p>
+    </div>
+
+    <div class="bg-white/90 backdrop-blur shadow-2xl rounded-3xl p-8 border border-white max-w-7xl w-full">
+
+        <div class="flex flex-wrap justify-center gap-6">
+
+            <div class="bg-indigo-50 rounded-2xl p-5 shadow-md">
+                <h2 class="font-bold text-indigo-700 mb-3 text-xl">Drawing Area</h2>
+
+                <canvas
+                    class="border-4 border-indigo-300 bg-white rounded-xl shadow-inner cursor-crosshair w-[360px] h-[220px]"
+                    id="inputimg"
+                    width="360"
+                    height="220">
+                </canvas>
+
+                <button
+                    class="mt-4 bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-6 rounded-xl w-full transition"
+                    id="clearbtn">
+                    Clear
+                </button>
+            </div>
+
+            <div class="bg-purple-50 rounded-2xl p-5 shadow-md text-center">
+                <h2 class="font-bold text-purple-700 mb-3 text-xl">Prediction</h2>
+
+                <div
+                    class="border-4 border-purple-300 bg-white text-purple-800 text-6xl font-extrabold w-[260px] h-[220px] flex items-center justify-center rounded-xl shadow-inner overflow-hidden"
+                    id="pred">
+                    0
+                </div>
+
+                <div class="mt-3 text-gray-700 font-semibold" id="prob">
+                    Probability:
+                </div>
+            </div>
+
+            <div class="bg-pink-50 rounded-2xl p-5 shadow-md">
+                <h2 class="font-bold text-pink-700 mb-3 text-xl">Probability Graph</h2>
+                <svg id="probGraph" width="250" height="220"></svg>
+            </div>
+
+        </div>
+
+        <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <button onclick="setMode('one')"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition">
+                🔢 One Digit Detect
+            </button>
+
+            <button onclick="setMode('multi')"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition">
+                🔢 Multi Digit Detect
+            </button>
+
+            <button onclick="setMode('sum')"
+                class="bg-pink-600 hover:bg-pink-700 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition">
+                ➕ Sum Digits
+            </button>
+
+            <button onclick="setMode('word')"
+                class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition">
+                📝 Detect Word
+            </button>
+
+            <button onclick="setMode('clearword')"
+                class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-5 rounded-2xl shadow-lg transition">
+                🧹 Clear Result
+            </button>
+
+        </div>
+
+        <div class="mt-6 bg-gray-100 rounded-2xl p-4 text-center">
+            <p class="text-gray-600 text-sm">Selected Mode:</p>
+            <p class="text-2xl font-bold text-indigo-700" id="modeText">
+                One Digit Detect
+            </p>
+            <p class="mt-2 text-xl font-bold text-gray-800" id="finalResult">
+                Result will appear here
+            </p>
+        </div>
+
+    </div>
+
+    <p class="mt-6 text-gray-600 text-sm">
+        PyTorch CNN Project • MNIST + EMNIST Recognition
+    </p>
+
+</div>
+
+<script>
+let currentMode = "one";
+
+const canvas = document.getElementById("inputimg");
+const ctx = canvas.getContext("2d");
+const predBox = document.getElementById("pred");
+
+ctx.fillStyle = "white";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.strokeStyle = "black";
+ctx.lineWidth = 8;
+ctx.lineCap = "round";
+ctx.lineJoin = "round";
+
+let drawing = false;
+
+function setMode(mode) {
+    currentMode = mode;
+
+    if (mode === "clearword") {
+        predBox.innerText = "0";
+        document.getElementById("prob").innerText = "Probability:";
+        document.getElementById("finalResult").innerText = "Result cleared";
+        drawGraph([]);
+        return;
+    }
+
+    document.getElementById("modeText").innerText =
+        mode === "one" ? "One Digit Detect" :
+        mode === "multi" ? "Multi Digit Detect" :
+        mode === "sum" ? "Sum Digits" :
+        mode === "letter" ? "Detect Letter" :
+        "Detect Word";
+
+    document.getElementById("finalResult").innerText =
+        mode === "one" ? "Draw one digit" :
+        mode === "multi" ? "Draw more than one digit" :
+        mode === "sum" ? "Draw digits to calculate their sum" :
+        mode === "letter" ? "Draw one English letter" :
+        "Draw separated English letters";
+
+    recognize();
+}
+
+canvas.onmousedown = function(e) {
+    drawing = true;
+    const r = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - r.left, e.clientY - r.top);
+};
+
+canvas.onmousemove = function(e) {
+    if (!drawing) return;
+    const r = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - r.left, e.clientY - r.top);
+    ctx.stroke();
+};
+
+canvas.onmouseup = function() {
+    drawing = false;
+    recognize();
+};
+
+canvas.onmouseleave = function() {
+    drawing = false;
+};
+
+document.getElementById("clearbtn").onclick = function() {
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "black";
+
+    predBox.innerText = "0";
+    document.getElementById("prob").innerText = "Probability:";
+    document.getElementById("finalResult").innerText = "Result will appear here";
+    drawGraph([]);
+};
+
+function recognize() {
+    canvas.toBlob(function(blob) {
+        const formData = new FormData();
+        formData.append("img", blob, "image.png");
+
+        let url = "/DigitRecognition";
+
+        if (currentMode === "one") {
+            formData.append("mode", "one");
+        }
+        else if (currentMode === "multi") {
+            formData.append("mode", "multi");
+        }
+        else if (currentMode === "sum") {
+            formData.append("mode", "sum");
+        }
+        else if (currentMode === "letter") {
+            url = "/LetterRecognition";
+            formData.append("mode", "one");
+        }
+        else if (currentMode === "word") {
+            url = "/LetterRecognition";
+            formData.append("mode", "word");
+        }
+
+        fetch(url, {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            drawGraph(data.probs || []);
+
+            if (currentMode === "one") {
+                predBox.innerText = data.pred;
+                document.getElementById("prob").innerText =
+                    "Probability: " + data.probs[data.pred].toFixed(2) + "%";
+                document.getElementById("finalResult").innerText =
+                    "Detected digit: " + data.pred;
+            }
+
+            else if (currentMode === "multi") {
+                predBox.innerText = data.multi || "-";
+                document.getElementById("prob").innerText = "Detected Number";
+                document.getElementById("finalResult").innerText =
+                    "Detected number: " + (data.multi || "No digits detected");
+            }
+
+            else if (currentMode === "sum") {
+                predBox.innerText = data.sum;
+                document.getElementById("prob").innerText = "Digit Sum";
+                document.getElementById("finalResult").innerText =
+                    "Digits: " + (data.multi || "-") + " → Sum = " + data.sum;
+            }
+
+            else if (currentMode === "letter") {
+                predBox.innerText = data.letter || "-";
+                document.getElementById("prob").innerText =
+                    data.letter ? "Detected Letter" : "No letter detected";
+                document.getElementById("finalResult").innerText =
+                    "Detected letter: " + (data.letter || "-");
+            }
+
+            else if (currentMode === "word") {
+                predBox.innerText = data.word || "-";
+                document.getElementById("prob").innerText = "Detected Word";
+                document.getElementById("finalResult").innerText =
+                    "Detected word: " + (data.word || "No letters detected");
+            }
+        })
+        .catch(error => {
+            console.log(error);
+            document.getElementById("finalResult").innerText =
+                "Error: check server.py";
+        });
+    });
+}
+
+function drawGraph(probs) {
+    const svg = document.getElementById("probGraph");
+    svg.innerHTML = "";
+
+    if (!probs || probs.length === 0) return;
+
+    const barHeight = 12;
+    const gap = 4;
+
+    const isLetterMode = currentMode === "letter" || currentMode === "word";
+    const count = isLetterMode ? 26 : 10;
+    const labels = isLetterMode ? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" : "0123456789";
+
+    for (let i = 0; i < count; i++) {
+        const y = i * (barHeight + gap);
+
+        if (y > 210) break;
+
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", "0");
+        label.setAttribute("y", y + 10);
+        label.setAttribute("font-size", "11");
+        label.setAttribute("fill", "#374151");
+        label.textContent = labels[i];
+        svg.appendChild(label);
+
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", "25");
+        rect.setAttribute("y", y);
+        rect.setAttribute("height", barHeight);
+        rect.setAttribute("width", (probs[i] || 0) * 2);
+        rect.setAttribute("fill", "#7c3aed");
+        rect.setAttribute("rx", "5");
+        svg.appendChild(rect);
+
+        const percent = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        percent.setAttribute("x", 30 + ((probs[i] || 0) * 2));
+        percent.setAttribute("y", y + 10);
+        percent.setAttribute("font-size", "10");
+        percent.setAttribute("fill", "#374151");
+        percent.textContent = (probs[i] || 0).toFixed(1) + "%";
+        svg.appendChild(percent);
+    }
+}
+</script>
+
+</body>
+</html>
